@@ -1089,6 +1089,10 @@ namespace _958
                                     ReestrRKUpdate.Rows.Add(newRow);
                                 }
                             }
+                            else
+                            {
+                                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - WARN - MultipleRows: файлы не найдены для токена '{token}'");
+                            }
                             continue; // Пропустить стандартный импорт в конце цикла
                         }
 
