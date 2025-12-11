@@ -73,7 +73,7 @@ namespace _958
 
 
             // Примеры использования метода для разных файлов CSV
-            DataTable reestrFilesTable = ReadCsvToDataTable("reestrFiles.csv");
+            DataTable reestrFilesTable = ReadCsvToDataTable("958_test_101225_reestrFiles.csv");
             //DataTable filteredFilesTable = ReadCsvToDataTable("dtReestrFilesFiltered.csv");
 
             // Получаем первое значение "Номер заявки"
@@ -192,7 +192,10 @@ namespace _958
 
                         //Вызываем метод FillReestrRK_NEW для обработки текста
                         //FillReestrRK_NEW(filteredFilesTable, bookReferenceTable, rowUniq, ReadDictionaryGUIDServices("dictionaryGUIDservices.csv"), ref log, text, ReestrRKUpdate);
-                        FillReestrRK_optimaize(filteredFilesTable, bookReferenceTable, rowUniq, dictionaryGUIDservices, ref log, text, ReestrRKUpdate);
+                        //FillReestrRK_optimaize(filteredFilesTable, bookReferenceTable, rowUniq, dictionaryGUIDservices, ref log, text, ReestrRKUpdate);
+
+                        //Вызвать метод FillReestrRK_NEW
+                        FillReestrRK_NEW(filteredFilesTable, bookReferenceTable, rowUniq, dictionaryGUIDservices, ref log, text, ReestrRKUpdate);
                     }
                     else
                     {
@@ -203,7 +206,7 @@ namespace _958
             }
 
 
-        }
+        }               
 
 
 
@@ -337,7 +340,7 @@ namespace _958
                     ("BANK", Anchored("AnketaBank")),
                     ("BANK", Anchored("anketa_zatavl")),
                     ("BANK", Anchored("anketa", excludeZatavl: true)),
-                    ("EDO",  Anchored("zayvlenieakcept")),
+                    ("EDO",  Anchored("zayаvlenieakcept")),
                     ("EDO",  Anchored("zayavlenie")),
                 };
 
@@ -361,43 +364,8 @@ namespace _958
                 }
 
                 logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Родитель найден: {hasParent}, subject_type={preferredSubject ?? "-"}");
-                //РодительКонец
 
-                /*//Родитель начало
-                // Определение наличия родителя и его subject_type
-                var parentSlotsMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    { "anketa_zatavl", "BANK" },
-                    { "anketa", "BANK" },
-                    { "AnketaBank", "BANK" },
-                    { "AnketaBroker", "BROK" },
-                    { "zayavlenie", "EDO" },
-                    { "zayvlenieakcept", "EDO" },
-                };
-
-                bool hasParent = false;
-                string preferredSubject = null;
-
-                foreach (DataRow r in dtReestrFilesFiltered.Rows)
-                {
-                    if (r["Номер заявки"]?.ToString() != requestNumber) continue;
-                    var name = Path.GetFileNameWithoutExtension(r["Путь к файлу"]?.ToString() ?? "");
-                    if (string.IsNullOrEmpty(name)) continue;
-
-                    foreach (var kv in parentSlotsMap)
-                    {
-                        if (name.IndexOf(kv.Key, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            hasParent = true;
-                            // Первый найденный тип считаем предпочтительным (минимально инвазивно)
-                            preferredSubject ??= kv.Value;
-                        }
-                    }
-                }
-
-                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Родитель найден: {hasParent}, subject_type={preferredSubject ?? "-"}");
-
-                //РодительКонец*/
+                
 
                 // Кэшируем строки для обновления
                 var matchingUpdateRows = new List<DataRow>();
@@ -754,8 +722,866 @@ namespace _958
             }
         }
 
+        public static void FiilReestrRK_opimaizeOLD(DataTable dtReestrFilesFiltered, DataTable dtBookOfReferenceReestrRK, DataRow rowUniqNumber, Dictionary<int, string> dictionaryGUIDservices, ref string log, string text, DataTable ReestrRKUpdate)
+        {
+            var logBuilder = new System.Text.StringBuilder();
+            try
+            {
+                // Кэшируем значения для ускорения доступа
+                string requestNumber = rowUniqNumber["Номер заявки"].ToString();
+                string guidEBA = null;
+                foreach (DataRow row in dtReestrFilesFiltered.Rows)
+                {
+                    guidEBA = row["GUID ЕВА клиента"]?.ToString();
+                    if (!string.IsNullOrEmpty(guidEBA)) break;
+                }
+                // Предварительно компилируем регулярные выражения
+                System.Text.RegularExpressions.Regex regexMain = null, regexAlt = null;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (text.Contains("anketa", StringComparison.Ordinal))
+                    {
+                        regexAlt = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)}_zatavl)(\d{{1,3}})?($|[_\s])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                        regexMain = new System.Text.RegularExpressions.Regex($@"(^|[_\s])(?!.*\bzatavl\b)({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?($|[_\s])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                    }
+                    else
+                    {
+                        regexMain = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?($|[_\s])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                    }
+                }
 
-       _newт
+                // Поиск совпадения
+                bool hasMatch = false;
+                foreach (DataRow fileRow in dtReestrFilesFiltered.Rows)
+                {
+                    var path = fileRow["Путь к файлу"]?.ToString();
+                    if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(text)) continue;
+                    string fileName = Path.GetFileNameWithoutExtension(path);
+
+                    bool isMatch = false;
+                    if (regexMain != null && regexAlt != null)
+                    {
+                        if (fileName.IndexOf("zatavl", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            isMatch = regexAlt.IsMatch(fileName);
+                        }
+                        else
+                        {
+                            isMatch = regexMain.IsMatch(fileName);
+                        }
+                    }
+                    else if (regexMain != null)
+                    {
+                        isMatch = regexMain.IsMatch(fileName);
+                    }
+
+                    if (isMatch)
+                    {
+                        logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - hasMatch: Найдено совпадение для '{text}' в файле '{fileName}'");
+                        hasMatch = true;
+                        break;
+                    }
+                }
+
+                if (!hasMatch) return;
+
+                // Кэшируем строки для обновления
+                var matchingUpdateRows = new List<DataRow>();
+                foreach (DataRow updateRow in dtBookOfReferenceReestrRK.Rows)
+                {
+                    var rowText = updateRow["Текст"]?.ToString();
+                    if (!string.IsNullOrEmpty(rowText) && rowText.Equals(text, StringComparison.OrdinalIgnoreCase))
+                        matchingUpdateRows.Add(updateRow);
+                }
+
+                // Кэшируем строки с совпадением по тексту в путях файлов
+                var rowsWithTextInFilePaths = new List<DataRow>();
+                System.Text.RegularExpressions.Regex regexFilePath = null;
+                if (text.Contains("anketa"))
+                {
+
+                    regexFilePath = new System.Text.RegularExpressions.Regex($@"(?!.*zatavl\w*)({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+                }
+                else
+                {
+                    regexFilePath = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?($|[_\s])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                }
+
+                foreach (DataRow filteredRow in dtReestrFilesFiltered.Rows)
+                {
+                    var rowText = filteredRow["Путь к файлу"]?.ToString();
+                    if (string.IsNullOrEmpty(rowText)) continue;
+                    string fileName = Path.GetFileNameWithoutExtension(rowText);
+                    if (regexFilePath.IsMatch(fileName))
+                        rowsWithTextInFilePaths.Add(filteredRow);
+                }
+
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Количество строк в matchingUpdateRows для {text} = {matchingUpdateRows.Count}");
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Количество строк в rowsWithTextInFilePaths для {text} = {rowsWithTextInFilePaths.Count}");
+
+                if (rowsWithTextInFilePaths.Count == 0) return;
+
+                // Кэшируем список документов для ускорения Contains
+                var passportSets = new HashSet<string> { "BN_DKBO0132", "BN_DKBO0048", "EDO0019", "BK1444", "DU0080", "PD0075" };
+
+                var importedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (DataRow ex in ReestrRKUpdate.Rows)
+                {
+                    var req = ex["Номер заявки"]?.ToString()?.Trim() ?? string.Empty;
+
+                    var ds = ex["document_set"]?.ToString()?.Trim() ?? string.Empty;
+
+                    var st = ex["subject_type"]?.ToString()?.Trim() ?? string.Empty;
+
+                    importedKeys.Add($"{req}|{ds}|{st}");
+
+                }
+
+                foreach (var updRow in matchingUpdateRows)
+                {
+                    var guid = Guid.NewGuid();
+                    var guidDocumentId = Guid.NewGuid();
+
+                    updRow["Номер заявки"] = requestNumber;
+                    updRow["complect_id"] = guid;
+                    updRow["document_id"] = guidDocumentId;
+                    updRow["master_id"] = guidEBA;
+
+                    string documentSet = updRow["document_set"]?.ToString();
+                    string subjectType = updRow["subject_type"]?.ToString();
+
+                    string GUIDserviceNumber = updRow["GUID услуги"]?.ToString();
+                    if (int.TryParse(GUIDserviceNumber, out int serviceNumber) && dictionaryGUIDservices.TryGetValue(serviceNumber, out string guidService))
+                    {
+                        updRow["contract_id"] = guidService;
+                    }
+
+                    string searchText = null;
+                    List<string> fileIds = null;
+
+
+
+
+                    // Проверяем, есть ли хотя бы один файл с text (по regex)
+                    System.Text.RegularExpressions.Regex regexSearchPasport = null;
+                    if (text.Contains("anketa"))
+                    {
+
+                        regexSearchPasport = new System.Text.RegularExpressions.Regex($@"(?!.*zatavl\w*)({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+                    }
+                    else
+                    {
+                        regexSearchPasport = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                    }
+
+
+                    bool hasTextFile = dtReestrFilesFiltered.AsEnumerable()
+                        .Any(r =>
+                            r["Номер заявки"]?.ToString() == requestNumber &&
+                            !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                            regexSearchPasport.IsMatch(Path.GetFileNameWithoutExtension(r["Путь к файлу"].ToString()))
+                        );
+
+
+
+                    if (passportSets.Contains(documentSet) && hasTextFile)
+                    {
+                        searchText = "pasport";
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "PD0084" && subjectType?.Trim() == "BANK")
+                    {
+                        var filesWithUvedomlenie1 = new List<string>();
+                        var filesWithUvedomlenie2 = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var path = r["Путь к файлу"].ToString();
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id))
+                                {
+                                    if (path.IndexOf("uvedomlenie1", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie1.Contains(id))
+                                        filesWithUvedomlenie1.Add(id);
+                                    if (path.IndexOf("uvedomlenie2", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie2.Contains(id))
+                                        filesWithUvedomlenie2.Add(id);
+                                }
+                            }
+                        }
+                        var allFiles = filesWithUvedomlenie1.Union(filesWithUvedomlenie2).ToList();
+                        if (allFiles.Count > 0)
+                            updRow["file_id"] = string.Join("|", allFiles);
+                    }
+                    else if (documentSet?.Trim() == "PD0084" && subjectType?.Trim() == "BROK")
+                    {
+                        var filesWithUvedomlenie3 = new List<string>();
+                        var filesWithUvedomlenie4 = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var path = r["Путь к файлу"].ToString();
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id))
+                                {
+                                    if (path.IndexOf("uvedomlenie3", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie3.Contains(id))
+                                        filesWithUvedomlenie3.Add(id);
+                                    if (path.IndexOf("uvedomlenie4", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie4.Contains(id))
+                                        filesWithUvedomlenie4.Add(id);
+                                }
+                            }
+                        }
+                        var allFiles = filesWithUvedomlenie3.Union(filesWithUvedomlenie4).ToList();
+                        if (allFiles.Count > 0)
+                            updRow["file_id"] = string.Join("|", allFiles);
+                    }
+                    else if (documentSet?.Trim() == "PD0085" && subjectType?.Trim() == "BANK")
+                    {
+                        searchText = "ZayavleniyeBanka";
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "PD0085" && subjectType?.Trim() == "BROK")
+                    {
+                        searchText = "ZayavleniyeKompaniya";
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "BN_DKBO0134")
+                    {
+                        logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - ОБРАБОТКА documentSet == BN_DKBO0134");
+                        var raspiskaFileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf("raspiska", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !raspiskaFileIds.Contains(id))
+                                    raspiskaFileIds.Add(id);
+                            }
+                        }
+                        if (raspiskaFileIds.Count > 0)
+                        {
+                            updRow["file_id"] = raspiskaFileIds[0];
+                            ReestrRKUpdate.ImportRow(updRow);
+
+                            for (int i = 1; i < raspiskaFileIds.Count; i++)
+                            {
+                                var newRow = ReestrRKUpdate.NewRow();
+                                foreach (DataColumn col in updRow.Table.Columns)
+                                {
+                                    if (ReestrRKUpdate.Columns.Contains(col.ColumnName))
+                                        newRow[col.ColumnName] = updRow[col.ColumnName];
+                                }
+                                newRow["file_id"] = raspiskaFileIds[i];
+                                ReestrRKUpdate.Rows.Add(newRow);
+                            }
+                        }
+                        continue;
+                    }
+                    else
+                    {
+                        searchText = updRow["Текст"]?.ToString();
+
+                        System.Text.RegularExpressions.Regex regexSearch = null;
+                        if (text.Contains("anketa"))
+                        {
+
+                            regexSearch = new System.Text.RegularExpressions.Regex($@"(?!.*zatavl\w*)({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+                        }
+                        else
+                        {
+                            regexSearch = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                        }
+
+
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() != requestNumber ||
+                                string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) ||
+                                r["ID файла в СХФ"]?.ToString() == "error")
+                                continue;
+
+                            string fileName = Path.GetFileNameWithoutExtension(r["Путь к файлу"].ToString());
+                            if (regexSearch.IsMatch(fileName))
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+
+
+                    //Если documentSet != "BN_DKBO0134" и updRow["file_id"] не пустой, то импортируем строку один раз на ключ заявки+набор+субъект 
+                    if (documentSet != "BN_DKBO0134" && !string.IsNullOrEmpty(updRow["file_id"]?.ToString()))
+                    {
+                        var key = $"{requestNumber}|{documentSet?.Trim()}|{subjectType?.Trim()}";
+                        if (importedKeys.Add(key))
+                        {
+                            ReestrRKUpdate.ImportRow(updRow);
+                        }
+                        else
+                        {
+                            logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Пропуск дубля для ключа {key}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - ERR - {ex.Message}  {ex.StackTrace}  {ex.Data}  {ex.Source}");
+            }
+            finally
+            {
+                log = log + Environment.NewLine + logBuilder.ToString();
+            }
+        }
+
+
+        public static void FillReestrRK_NEW(DataTable dtReestrFilesFiltered, DataTable dtBookOfReferenceReestrRK, DataRow rowUniqNumber, Dictionary<int, string> dictionaryGUIDservices, ref string log, string text, DataTable ReestrRKUpdate)
+        {
+            var logBuilder = new System.Text.StringBuilder();
+            try
+            {
+                string requestNumber = rowUniqNumber["Номер заявки"].ToString();
+                string guidEBA = null;
+                foreach (DataRow row in dtReestrFilesFiltered.Rows)
+                {
+                    guidEBA = row["GUID ЕВА клиента"]?.ToString();
+                    if (!string.IsNullOrEmpty(guidEBA)) break;
+                }
+
+                System.Text.RegularExpressions.Regex regexMain = null, regexAlt = null;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (text.Contains("anketa", StringComparison.Ordinal))
+                    {
+                        regexAlt = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)}_zatavl)(\d{{1,3}})?($|[_\s])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                        regexMain = new System.Text.RegularExpressions.Regex($@"(^|[_\s])(?!.*\bzatavl\b)({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?($|[_\s])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                    }
+                    else
+                    {
+                        regexMain = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?($|[_\s])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                    }
+                }
+
+                bool hasMatch = false;
+                foreach (DataRow fileRow in dtReestrFilesFiltered.Rows)
+                {
+                    var path = fileRow["Путь к файлу"]?.ToString();
+                    if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(text)) continue;
+                    string fileName = Path.GetFileNameWithoutExtension(path);
+
+                    bool isMatch = false;
+                    if (regexMain != null && regexAlt != null)
+                    {
+                        if (fileName.IndexOf("zatavl", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            isMatch = regexAlt.IsMatch(fileName);
+                        }
+                        else
+                        {
+                            isMatch = regexMain.IsMatch(fileName);
+                        }
+                    }
+                    else if (regexMain != null)
+                    {
+                        isMatch = regexMain.IsMatch(fileName);
+                    }
+
+                    if (isMatch)
+                    {
+                        logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - hasMatch: Найдено совпадение для '{text}' в файле '{fileName}'");
+                        hasMatch = true;
+                        break;
+                    }
+                }
+
+                if (!hasMatch) return;
+
+                var parentSubjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                static Regex Anchored(string token, bool excludeZatavl = false)
+                {
+                    var safe = Regex.Escape(token);
+                    var negative = excludeZatavl ? "(?!.*zatavl\\w*)" : string.Empty;
+                    return new Regex($@"(^|[_\s]){negative}{safe}(\d{{1,3}})?($|[_\s])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                }
+
+                var parentPatterns = new (string subject, Regex pattern)[]
+                {
+                    ("BROK", Anchored("AnketaBroker")),
+                    ("BANK", Anchored("AnketaBank")),
+                    ("BANK", Anchored("anketa_zatavl")),
+                    //("BANK", Anchored("anketa", excludeZatavl: true)),
+                    ("BANK", new Regex($@"(^|[_\s])anketa(?![_a-zA-Z])(\d{1,3})?($|[_\s])", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+                    ("EDO",  Anchored("zayavlenieakcept")),
+                    ("EDO",  Anchored("zayavlenie")),
+                };
+
+                foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                {
+                    if (!string.Equals(r["Номер заявки"]?.ToString(), requestNumber, StringComparison.Ordinal)) continue;
+
+                    var name = Path.GetFileNameWithoutExtension(r["Путь к файлу"]?.ToString() ?? string.Empty);
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    foreach (var (subject, pattern) in parentPatterns)
+                    {
+                        if (pattern.IsMatch(name))
+                        {
+                            parentSubjects.Add(subject);
+                        }
+                    }
+                }
+
+                bool hasParent = parentSubjects.Count > 0;
+                var parentSubjectsForLog = hasParent ? string.Join(",", parentSubjects) : "-";
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Родитель найден: {hasParent}, subject_type={parentSubjectsForLog}");
+
+                /*var matchingUpdateRows = new List<DataRow>();
+                foreach (DataRow updateRow in dtBookOfReferenceReestrRK.Rows)
+                {
+                    var rowText = updateRow["Текст"]?.ToString();
+                    if (!string.IsNullOrEmpty(rowText) && rowText.Equals(text, StringComparison.OrdinalIgnoreCase))
+                        matchingUpdateRows.Add(updateRow);
+                }*/
+
+                var matchingUpdateRows = dtBookOfReferenceReestrRK.AsEnumerable()
+                    .Where(updateRow =>
+                    {
+                        var rowText = updateRow["Текст"]?.ToString();
+                        if (string.IsNullOrEmpty(rowText) || !rowText.Equals(text, StringComparison.OrdinalIgnoreCase))
+                            return false;
+
+                        if (text.Equals("registration", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var docSet = updateRow["document_set"]?.ToString()?.Trim();
+                            var subject = updateRow["subject_type"]?.ToString()?.Trim();
+                            var isBankParent = parentSubjects.Contains("BANK");
+                            var isBrokParent = parentSubjects.Contains("BROK");
+
+                            if (isBankParent && docSet == "BN_DKBO0064" && subject == "BANK")
+                                return true;
+                            if (isBrokParent && docSet == "PD0085" && subject == "BROK")
+                                return true;
+                            return false;
+                        }
+
+                        return true;
+                    })
+                    .ToList();
+
+                var rowsWithTextInFilePaths = new List<DataRow>();
+                Regex regexFilePath = null;
+                if (text.Contains("anketa"))
+                {
+                    regexFilePath = new Regex($@"(?!.*zatavl\\w*)({Regex.Escape(text)})(\d{{1,3}})?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                }
+                else
+                {
+                    regexFilePath = new Regex($@"(^|[_\s])({Regex.Escape(text)})(\d{{1,3}})?($|[_\s])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                }
+
+                foreach (DataRow filteredRow in dtReestrFilesFiltered.Rows)
+                {
+                    var rowText = filteredRow["Путь к файлу"]?.ToString();
+                    if (string.IsNullOrEmpty(rowText)) continue;
+                    string fileName = Path.GetFileNameWithoutExtension(rowText);
+                    if (regexFilePath.IsMatch(fileName))
+                        rowsWithTextInFilePaths.Add(filteredRow);
+                }
+
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Количество строк в matchingUpdateRows для {text} = {matchingUpdateRows.Count}");
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Количество строк в rowsWithTextInFilePaths для {text} = {rowsWithTextInFilePaths.Count}");
+
+                bool isChildSlot = text.Equals("uvedomlenie1", StringComparison.OrdinalIgnoreCase)
+                    || text.Equals("uvedomlenie2", StringComparison.OrdinalIgnoreCase)
+                    || text.Equals("uvedomlenie3", StringComparison.OrdinalIgnoreCase)
+                    || text.Equals("uvedomlenie4", StringComparison.OrdinalIgnoreCase)
+                    || text.Equals("ZayavleniyeBanka", StringComparison.OrdinalIgnoreCase)
+                    || text.Equals("ZayavleniyeKompaniya", StringComparison.OrdinalIgnoreCase)
+                    || text.Equals("registration", StringComparison.OrdinalIgnoreCase);
+
+                if (isChildSlot && hasParent)
+                {
+                    matchingUpdateRows = matchingUpdateRows
+                        .Where(row =>
+                        {
+                            var rowSubject = row["subject_type"]?.ToString()?.Trim();
+                            return !string.IsNullOrEmpty(rowSubject) && parentSubjects.Contains(rowSubject);
+                        })
+                        .ToList();
+
+                    logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - matchingUpdateRows отфильтрован по subject_type={parentSubjectsForLog}, rows={matchingUpdateRows.Count}");
+
+                    // Если после фильтрации ничего не осталось — фиксируем и выходим
+                    if (matchingUpdateRows.Count == 0)
+                    {
+                        logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - WARN - Для '{text}' не найдено строк справочника c subject_type={parentSubjectsForLog}. Пропуск.");
+                        return;
+                    }
+                }
+
+                if (rowsWithTextInFilePaths.Count == 0) return;
+
+                var passportSets = new HashSet<string> { "BN_DKBO0132", "BN_DKBO0048", "EDO0019", "BK1444", "DU0080", "PD0075" };
+
+
+                var complectCache = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
+                var importedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (DataRow ex in ReestrRKUpdate.Rows)
+                {
+                    var req = ex["Номер заявки"]?.ToString()?.Trim() ?? string.Empty;
+                    var ds = ex["document_set"]?.ToString()?.Trim() ?? string.Empty;
+                    var st = ex["subject_type"]?.ToString()?.Trim() ?? string.Empty;
+                    importedKeys.Add($"{req}|{ds}|{st}");
+                }
+
+                foreach (var updRow in matchingUpdateRows)
+                {
+                    var guid = Guid.NewGuid();
+                    var guidDocumentId = Guid.NewGuid();
+
+                    updRow["Номер заявки"] = requestNumber;
+
+                    string documentSet = updRow["document_set"]?.ToString();
+                    string subjectType = updRow["subject_type"]?.ToString();
+                    var normalizedSubjectType = subjectType?.Trim();
+
+                    if (isChildSlot && hasParent && !string.IsNullOrEmpty(normalizedSubjectType) && parentSubjects.Contains(normalizedSubjectType))
+                    {
+                        var complectKey = $"{requestNumber}|{normalizedSubjectType}";
+                        if (!complectCache.TryGetValue(complectKey, out var existing))
+                        {
+                            complectCache[complectKey] = guid;
+                        }
+                        else
+                        {
+                            guid = existing;
+                        }
+                    }
+
+                    updRow["complect_id"] = guid;
+                    updRow["document_id"] = guidDocumentId;
+                    updRow["master_id"] = guidEBA;
+
+                    string GUIDserviceNumber = updRow["GUID услуги"]?.ToString();
+                    if (int.TryParse(GUIDserviceNumber, out int serviceNumber) && dictionaryGUIDservices.TryGetValue(serviceNumber, out string guidService))
+                    {
+                        updRow["contract_id"] = guidService;
+                    }
+
+                    string searchText = null;
+                    List<string> fileIds = null;
+
+                    Regex regexSearchPasport = null;
+                    if (text.Contains("anketa"))
+                    {
+                        regexSearchPasport = new Regex($@"(?!.*zatavl\\w*)({Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                    }
+                    else
+                    {
+                        regexSearchPasport = new Regex($@"(^|[_\s])({Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                    }
+
+                    bool hasTextFile = dtReestrFilesFiltered.AsEnumerable()
+                        .Any(r =>
+                            r["Номер заявки"]?.ToString() == requestNumber &&
+                            !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                            regexSearchPasport.IsMatch(Path.GetFileNameWithoutExtension(r["Путь к файлу"].ToString()))
+                        );
+
+
+                    if (passportSets.Contains(documentSet) && hasTextFile)
+                    {
+                        searchText = "pasport";
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "PD0084" && normalizedSubjectType == "BANK")
+                    {
+                        var filesWithUvedomlenie1 = new List<string>();
+                        var filesWithUvedomlenie2 = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var path = r["Путь к файлу"].ToString();
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id))
+                                {
+                                    if (path.IndexOf("uvedomlenie1", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie1.Contains(id))
+                                        filesWithUvedomlenie1.Add(id);
+                                    if (path.IndexOf("uvedomlenie2", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie2.Contains(id))
+                                        filesWithUvedomlenie2.Add(id);
+                                }
+                            }
+                        }
+                        var allFiles = filesWithUvedomlenie1.Union(filesWithUvedomlenie2).ToList();
+                        if (allFiles.Count > 0)
+                            updRow["file_id"] = string.Join("|", allFiles);
+                    }
+                    else if (documentSet?.Trim() == "PD0084" && normalizedSubjectType == "BROK")
+                    {
+                        var filesWithUvedomlenie3 = new List<string>();
+                        var filesWithUvedomlenie4 = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var path = r["Путь к файлу"].ToString();
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id))
+                                {
+                                    if (path.IndexOf("uvedomlenie3", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie3.Contains(id))
+                                        filesWithUvedomlenie3.Add(id);
+                                    if (path.IndexOf("uvedomlenie4", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie4.Contains(id))
+                                        filesWithUvedomlenie4.Add(id);
+                                }
+                            }
+                        }
+                        var allFiles = filesWithUvedomlenie3.Union(filesWithUvedomlenie4).ToList();
+                        if (allFiles.Count > 0)
+                            updRow["file_id"] = string.Join("|", allFiles);
+                    }
+                    else if (documentSet?.Trim() == "PD0085" && normalizedSubjectType == "BANK")
+                    {
+                        searchText = "ZayavleniyeBanka";
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "PD0085" && normalizedSubjectType == "BROK")
+                    {
+                        //searchText = "ZayavleniyeKompaniya";
+                        searchText = text.Equals("registration", StringComparison.OrdinalIgnoreCase)
+                            ? "registration"
+                            : "ZayavleniyeKompaniya";
+
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "BN_DKBO0064")
+                    {
+                        searchText = text.Equals("registration", StringComparison.OrdinalIgnoreCase)
+                            ? "registration"
+                            : "ZayavleniyeBanka";
+
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "BN_DKBO0134")
+                    {
+                        logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - ОБРАБОТКА documentSet == BN_DKBO0134");
+                        var raspiskaFileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf("raspiska", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !raspiskaFileIds.Contains(id))
+                                    raspiskaFileIds.Add(id);
+                            }
+                        }
+                        if (raspiskaFileIds.Count > 0)
+                        {
+                            updRow["file_id"] = raspiskaFileIds[0];
+                            ReestrRKUpdate.ImportRow(updRow);
+
+                            for (int i = 1; i < raspiskaFileIds.Count; i++)
+                            {
+                                var newRow = ReestrRKUpdate.NewRow();
+                                foreach (DataColumn col in updRow.Table.Columns)
+                                {
+                                    if (ReestrRKUpdate.Columns.Contains(col.ColumnName))
+                                        newRow[col.ColumnName] = updRow[col.ColumnName];
+                                }
+                                newRow["file_id"] = raspiskaFileIds[i];
+                                ReestrRKUpdate.Rows.Add(newRow);
+                            }
+                        }
+                        continue;
+                    }
+                    else
+                    {
+                        searchText = updRow["Текст"]?.ToString();
+
+                        System.Text.RegularExpressions.Regex regexSearch = null;
+                        if (text.Contains("anketa"))
+                        {
+
+                            regexSearch = new System.Text.RegularExpressions.Regex($@"(?!.*zatavl\w*)({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+                        }
+                        else
+                        {
+                            regexSearch = new System.Text.RegularExpressions.Regex($@"(^|[_\s])({System.Text.RegularExpressions.Regex.Escape(text)})(\d{{1,3}})?(?![a-zA-Zа-яА-Я])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                        }
+
+
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() != requestNumber ||
+                                string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) ||
+                                r["ID файла в СХФ"]?.ToString() == "error")
+                                continue;
+
+                            string fileName = Path.GetFileNameWithoutExtension(r["Путь к файлу"].ToString());
+                            if (regexSearch.IsMatch(fileName))
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+
+
+                    //Если documentSet != "BN_DKBO0134" и updRow["file_id"] не пустой, то импортируем строку один раз на ключ заявки+набор+субъект 
+                    if (documentSet != "BN_DKBO0134" && !string.IsNullOrEmpty(updRow["file_id"]?.ToString()))
+                    {
+                        var key = $"{requestNumber}|{documentSet?.Trim()}|{subjectType?.Trim()}";
+                        if (importedKeys.Add(key))
+                        {
+                            ReestrRKUpdate.ImportRow(updRow);
+                        }
+                        else
+                        {
+                            logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Пропуск дубля для ключа {key}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - ERR - {ex.Message}  {ex.StackTrace}  {ex.Data}  {ex.Source}");
+            }
+            finally
+            {
+                log = log + Environment.NewLine + logBuilder.ToString();
+            }
+        }
+
+
+
 
 
 

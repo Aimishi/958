@@ -1,0 +1,17 @@
+Дано:
+Одна заявка 130046114 с тремя типами услуг [{"service_guid":"75204795-DF99-4D14-AF43-21C98B5E795F","service_type":2},{"service_guid":"B5018262-091F-40B0-AECE-637D7C96E4F1","service_type":1},{"service_guid":"7A1A1EA4-A9C0-40E7-9156-B4AA19F82BE8","service_type":3}]
+в архиве:
+Три родительских документа: 
+a.    anketa_zatavl (банковский, ему соответствует "service_type":1)
+b.    zayavlenie (ЭДО, ему соответствует "service_type":3)
+c.    AnketaBroker (брокер, ему соответствует "service_type":2)
+Шесть дочерних документов
+a.    pasport
+b.    Uvedomlenie1-2
+c.    Uvedomlenie3-4
+d.    Registration
+e.    ZayavleniyeBanka
+f.    ZayavleniyeKompaniya
+По банку должно было сформироваться 5 РК: BN_DKBO0130 (для anketa_zatavl), BN_DKBO0132 (для pasport), PD0084 (для Uvedomlenie1-2), BN_DKBO0313 (для ZayavleniyeBanka), BN_DKBO0064 (для Registration). У каждой из указанных РК contract_id должен был быть равен B5018262-091F-40B0-AECE-637D7C96E4F1, а subject_type = BANK. Не сформировалась ни одна из них.
+По ЭДО должно было сформироваться 5 РК: EDO0042 (для zayavlenie), EDO0019 (для passport), PD0084 (для Uvedomlenie3-4), EDO0078 (для ZayavleniyeKompaniya), PD0085 (для Registration). У каждой из указанных РК contract_id должен был быть равен 7A1A1EA4-A9C0-40E7-9156-B4AA19F82BE8, а subject_type = EDO. Сформированы только РК EDO0042 и EDO0019.
+По брокеру должно было сформироваться 5 РК: BK1381 (для AnketaBroker), BK1444 (для pasport), PD0084 (для Uvedomlenie3-4), BK1186 (для ZayavleniyeKompaniya), PD0085 (для Registration). У каждой из указанных РК contract_id должен был быть равен 75204795-DF99-4D14-AF43-21C98B5E795F, а subject_type = BROK. Корректно сформированы РК BK1381, BK1444, PD0084, BK1186. Некорректно сформирована PD0085: вместо файла Registration в ней отправлен файл ZayavleniyeKompaniya с его параметром is_original (у Registration is_original = 0, а не 1, как у ZayavleniyeKompaniya).
