@@ -1155,6 +1155,7 @@ namespace _958
                 if (!hasMatch) return;
 
                 var parentSubjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var foundParentSlots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 static Regex Anchored(string token, bool excludeZatavl = false)
                 {
@@ -1163,15 +1164,16 @@ namespace _958
                     return new Regex($@"(^|[_\s]){negative}{safe}(\d{{1,3}})?($|[_\s])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
                 }
 
-                var parentPatterns = new (string subject, Regex pattern)[]
+                var parentPatterns = new (string subject, string slot, Regex pattern)[]
                 {
-                    ("BROK", Anchored("AnketaBroker")),
-                    ("BANK", Anchored("AnketaBank")),
-                    ("BANK", Anchored("anketa_zatavl")),
-                    //("BANK", Anchored("anketa", excludeZatavl: true)),
-                    ("BANK", new Regex($@"(^|[_\s])anketa(?![_a-zA-Z])(\d{1,3})?($|[_\s])", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
-                    ("EDO",  Anchored("zayavlenieakcept")),
-                    ("EDO",  Anchored("zayavlenie")),
+                    ("BROK", "AnketaBroker",    Anchored("AnketaBroker")),
+                    ("BANK", "AnketaBank",      Anchored("AnketaBank")),
+                    ("BANK", "anketa_zatavl",   Anchored("anketa_zatavl")),
+                    // строгая anketa как отдельный слот
+                    ("BANK", "anketa",          new Regex($@"(^|[_\s])anketa(?![_a-zA-Z])(\d{{1,3}})?($|[_\s])", RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+                    ("EDO",  "zayavlenieakcept",Anchored("zayavlenieakcept")),
+                    ("EDO",  "zayavlenie",      Anchored("zayavlenie")),
+                    ("DU",   "AnketaDU",        Anchored("AnketaDU")),
                 };
 
                 foreach (DataRow r in dtReestrFilesFiltered.Rows)
@@ -1181,18 +1183,20 @@ namespace _958
                     var name = Path.GetFileNameWithoutExtension(r["Путь к файлу"]?.ToString() ?? string.Empty);
                     if (string.IsNullOrEmpty(name)) continue;
 
-                    foreach (var (subject, pattern) in parentPatterns)
+                    foreach (var (subject, slot, pattern) in parentPatterns)
                     {
                         if (pattern.IsMatch(name))
                         {
                             parentSubjects.Add(subject);
+                            foundParentSlots.Add(slot);
                         }
                     }
                 }
 
                 bool hasParent = parentSubjects.Count > 0;
                 var parentSubjectsForLog = hasParent ? string.Join(",", parentSubjects) : "-";
-                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Родитель найден: {hasParent}, subject_type={parentSubjectsForLog}");
+                var foundParentSlotsForLog = foundParentSlots.Count > 0 ? string.Join(",", foundParentSlots) : "-";
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Родитель найден: {hasParent}, subject_type={parentSubjectsForLog}, slots={foundParentSlotsForLog}");
 
                 /*var matchingUpdateRows = new List<DataRow>();
                 foreach (DataRow updateRow in dtBookOfReferenceReestrRK.Rows)
@@ -1215,11 +1219,16 @@ namespace _958
                             var subject = updateRow["subject_type"]?.ToString()?.Trim();
                             var isBankParent = parentSubjects.Contains("BANK");
                             var isBrokParent = parentSubjects.Contains("BROK");
+                            var isEdoParent = parentSubjects.Contains("EDO");
 
                             if (isBankParent && docSet == "BN_DKBO0064" && subject == "BANK")
                                 return true;
                             if (isBrokParent && docSet == "PD0085" && subject == "BROK")
                                 return true;
+                            // EDO: родитель zayavlenie / zayvlenieakcept → PD0085/EDO
+                            if (isEdoParent && docSet == "PD0085" && subject == "EDO")
+                                return true;
+
                             return false;
                         }
 
@@ -1349,7 +1358,7 @@ namespace _958
                         );
 
 
-                    if (passportSets.Contains(documentSet) && hasTextFile)
+                    /*if (passportSets.Contains(documentSet) && hasTextFile)
                     {
                         searchText = "pasport";
                         fileIds = new List<string>();
@@ -1366,7 +1375,60 @@ namespace _958
                             }
                         }
                         if (fileIds.Count > 0)
-                            updRow["file_id"] = string.Join("|", fileIds);
+                            updRow["file_id"] = string.Join("|", fileIds);*/
+
+                    if (passportSets.Contains(documentSet) && hasTextFile)
+                    {
+                        // Правила из кЗадаче.csv: какой родительский слот даёт право на какой passport document_set
+                        // parentSlot, document_set, ожидаемый subject_type
+                        var passportParentRules = new (string ParentSlot, string DocumentSet, string SubjectType)[]
+                        {
+                        ("anketa_zatavl", "BN_DKBO0132", "BANK"),
+                        ("AnketaBank",    "BN_DKBO0048", "BANK"),
+                        ("zayavlenie",    "EDO0019",     "EDO"),
+                        ("zayvlenieakcept","EDO0019",    "EDO"),
+                        ("AnketaBroker",  "BK1444",      "BROK"),
+                        ("AnketaDU",      "DU0080",      "DU"),
+                        ("anketa",        "PD0075",      "BANK"),
+                        };
+
+                        var normDocSet = documentSet?.Trim();
+                        var normSubject = normalizedSubjectType;
+
+                        // Ищем правило, которое разрешает создание данного passport-набора
+                        var rule = passportParentRules.FirstOrDefault(r =>
+                            r.DocumentSet.Equals(normDocSet, StringComparison.OrdinalIgnoreCase) &&
+                            (string.IsNullOrEmpty(r.SubjectType) ||
+                                r.SubjectType.Equals(normSubject, StringComparison.OrdinalIgnoreCase)) &&
+                            foundParentSlots.Contains(r.ParentSlot));
+
+                        if (rule.DocumentSet == null)
+                        {
+                            // Нет подходящего родителя — пропускаем этот passport-комплект
+                            logBuilder.AppendLine(
+                                $"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Пропуск {documentSet} ({subjectType}) для заявки {requestNumber}: не найден родительский слот для passport (rules from kZadache.csv)");
+                        }
+                        else
+                        {
+                            // Родитель найден по правилам — привязываем все pasport* файлы
+                            searchText = "pasport";
+                            fileIds = new List<string>();
+                            foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                            {
+                                if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                    !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                    r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                    r["ID файла в СХФ"]?.ToString() != "error")
+                                {
+                                    var id = r["ID файла в СХФ"]?.ToString();
+                                    if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                        fileIds.Add(id);
+                                }
+                            }
+                            if (fileIds.Count > 0)
+                                updRow["file_id"] = string.Join("|", fileIds);
+                        }
+                        
                     }
                     else if (documentSet?.Trim() == "PD0084" && normalizedSubjectType == "BANK")
                     {
@@ -1421,6 +1483,29 @@ namespace _958
                     else if (documentSet?.Trim() == "PD0085" && normalizedSubjectType == "BANK")
                     {
                         searchText = "ZayavleniyeBanka";
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "PD0085" && normalizedSubjectType == "EDO")
+                    {
+                        // Для EDO по кЗадаче: registration → PD0085/EDO, должны брать registration_*
+                        searchText = text.Equals("registration", StringComparison.OrdinalIgnoreCase)
+                            ? "registration"
+                            : "ZayavleniyeKompaniya"; // теоретически сюда не попадём для других слотов, но оставим на всякий случай
+
                         fileIds = new List<string>();
                         foreach (DataRow r in dtReestrFilesFiltered.Rows)
                         {
