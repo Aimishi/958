@@ -106,7 +106,9 @@ namespace _958
             }
 
 
-            DataTable bookReferenceTable = ReadCsvToDataTable("dtBookOfReferenceReestrRK.csv");
+            //DataTable bookReferenceTable = ReadCsvToDataTable("dtBookOfReferenceReestrRK.csv");
+
+            DataTable bookReferenceTable = ReadCsvToDataTable("dtBookOfReferenceReestrRK_new.csv");
 
             // Вывод информации для демонстрации (например, количество строк)
             Console.WriteLine($"reestrFiles.csv: {reestrFilesTable.Rows.Count} строк");
@@ -1480,6 +1482,32 @@ namespace _958
                         if (allFiles.Count > 0)
                             updRow["file_id"] = string.Join("|", allFiles);
                     }
+                    else if (documentSet?.Trim() == "PD0084" && normalizedSubjectType == "EDO")
+                    {
+                        // по кЗадаче: zayavlenie/zayvlenieakcept + uvedomlenie3/4 → PD0084/EDO
+                        var filesWithUvedomlenie3 = new List<string>();
+                        var filesWithUvedomlenie4 = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var path = r["Путь к файлу"].ToString();
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id))
+                                {
+                                    if (path.IndexOf("uvedomlenie3", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie3.Contains(id))
+                                        filesWithUvedomlenie3.Add(id);
+                                    if (path.IndexOf("uvedomlenie4", StringComparison.OrdinalIgnoreCase) >= 0 && !filesWithUvedomlenie4.Contains(id))
+                                        filesWithUvedomlenie4.Add(id);
+                                }
+                            }
+                        }
+                        var allFiles = filesWithUvedomlenie3.Union(filesWithUvedomlenie4).ToList();
+                        if (allFiles.Count > 0)
+                            updRow["file_id"] = string.Join("|", allFiles);
+                    }
                     else if (documentSet?.Trim() == "PD0085" && normalizedSubjectType == "BANK")
                     {
                         searchText = "ZayavleniyeBanka";
@@ -1528,6 +1556,27 @@ namespace _958
                         searchText = text.Equals("registration", StringComparison.OrdinalIgnoreCase)
                             ? "registration"
                             : "ZayavleniyeKompaniya";
+
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "EDO0078" && normalizedSubjectType == "EDO")
+                    {
+                        // по кЗадаче: zayavlenie/zayvlenieakcept + ZayavleniyeKompaniya → EDO0078/EDO
+                        searchText = "ZayavleniyeKompaniya";
 
                         fileIds = new List<string>();
                         foreach (DataRow r in dtReestrFilesFiltered.Rows)
