@@ -108,11 +108,11 @@ namespace _958
 
             //DataTable bookReferenceTable = ReadCsvToDataTable("dtBookOfReferenceReestrRK.csv");
 
-            DataTable bookReferenceTable = ReadCsvToDataTable("dtBookOfReferenceReestrRK_new.csv");
+            DataTable bookReferenceTable = ReadCsvToDataTable("dtBookOfReferenceReestrRK_new_2.csv");
 
             // Вывод информации для демонстрации (например, количество строк)
             Console.WriteLine($"reestrFiles.csv: {reestrFilesTable.Rows.Count} строк");
-            Console.WriteLine($"dtReestrFilesFiltered.csv: {filteredFilesTable.Rows.Count} строк");
+            Console.WriteLine($"dtReestrFilesFiltered_new_2.csv: {filteredFilesTable.Rows.Count} строк");
             Console.WriteLine($"dtBookOfReferenceReestrRK.csv: {bookReferenceTable.Rows.Count} строк");
 
             //Добавить в bookReferenceTable колонки "Номер заявки", "master_id", "contract_id", "document_id", "file_id"
@@ -198,6 +198,7 @@ namespace _958
 
                         //Вызвать метод FillReestrRK_NEW
                         FillReestrRK_NEW(filteredFilesTable, bookReferenceTable, rowUniq, dictionaryGUIDservices, ref log, text, ReestrRKUpdate);
+                        //Class2.FillReestrRK_NEW(filteredFilesTable, bookReferenceTable, rowUniq, dictionaryGUIDservices, ref log, text, ReestrRKUpdate);
                     }
                     else
                     {
@@ -208,9 +209,321 @@ namespace _958
             }
 
 
-        }               
+        }
 
 
+        // Нормализует/обновляет dtBookOfReferenceReestrRK перед основной обработкой:
+        // - проставляет "GUID услуги" (ключ service_type) для регистрационных/PD0084/PD0085 случаев
+        // - задаёт subject_type для registration/PD0084/uvedomlenie3/4/ZayavleniyeKompaniya в зависимости от service_type
+        // Вызывать один раз перед циклом, где вызывается FillReestrRK_NEW.
+        public static void NormalizeBookReferenceForServices(DataTable dtBookOfReferenceReestrRK, Dictionary<int, string> dictionaryGUIDservices, ref string log)
+        {
+            var logBuilder = new System.Text.StringBuilder();
+            try
+            {
+                // Выбор приоритетного service_type для "не-1" (предпочитаем 3 — EDO, если есть)
+                int preferredNonOneServiceType = 0;
+                if (dictionaryGUIDservices.ContainsKey(3))
+                    preferredNonOneServiceType = 3;
+                else
+                    preferredNonOneServiceType = dictionaryGUIDservices.Keys.FirstOrDefault(k => k != 1);
+
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - preferredNonOneServiceType = {preferredNonOneServiceType}");
+
+                // 1) Обработать PD0084 для uvedomlenie3/4: проставить GUID услуги и subject_type
+                if (preferredNonOneServiceType != 0)
+                {
+                    var rowsU3 = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(r => r.Field<string>("Текст") == "uvedomlenie3" && r.Field<string>("document_set") == "PD0084");
+                    foreach (var r in rowsU3)
+                    {
+                        r["GUID услуги"] = preferredNonOneServiceType.ToString();
+                        r["subject_type"] = (preferredNonOneServiceType == 3) ? "EDO" : "BROK";
+                    }
+
+                    var rowsU4 = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(r => r.Field<string>("Текст") == "uvedomlenie4" && r.Field<string>("document_set") == "PD0084");
+                    foreach (var r in rowsU4)
+                    {
+                        r["GUID услуги"] = preferredNonOneServiceType.ToString();
+                        r["subject_type"] = (preferredNonOneServiceType == 3) ? "EDO" : "BROK";
+                    }
+
+                    // ZayavleniyeKompaniya: назначаем document_set в зависимости от service_type (BK1186 или EDO0078)
+                    var zRow = dtBookOfReferenceReestrRK.AsEnumerable().FirstOrDefault(r => r.Field<string>("Текст") == "ZayavleniyeKompaniya");
+                    if (zRow != null)
+                    {
+                        zRow["GUID услуги"] = preferredNonOneServiceType.ToString();
+                        if (preferredNonOneServiceType == 3)
+                        {
+                            zRow["document_set"] = "EDO0078";
+                            zRow["subject_type"] = "EDO";
+                        }
+                        else
+                        {
+                            zRow["document_set"] = "BK1186";
+                            zRow["subject_type"] = "BROK";
+                        }
+                    }
+                }
+                else
+                {
+                    logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - WARN - Нет service_type != 1 в dictionaryGUIDservices, PD0084/EDO/BROK правила не применены");
+                }
+
+                // 2) Registration: BN_DKBO0064 -> service_type == 1 (BANK) если есть
+                var serviceTypeEq1 = dictionaryGUIDservices.Keys.FirstOrDefault(k => k == 1);
+                if (serviceTypeEq1 != 0)
+                {
+                    var rowsBn = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(r => r.Field<string>("Текст") == "registration" && r.Field<string>("document_set") == "BN_DKBO0064");
+                    foreach (var r in rowsBn)
+                    {
+                        r["GUID услуги"] = serviceTypeEq1.ToString();
+                        r["subject_type"] = "BANK";
+                    }
+                }
+                else
+                {
+                    // Если нет — удаляем такие строки как раньше (опционально)
+                    var rowsToDelete = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(r => r.Field<string>("Текст") == "registration" && r.Field<string>("document_set") == "BN_DKBO0064").ToList();
+                    foreach (var rr in rowsToDelete) rr.Delete();
+                    dtBookOfReferenceReestrRK.AcceptChanges();
+                    logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Удалены registration+BN_DKBO0064 (service_type==1 не найден)");
+                }
+
+                // 3) Registration: PD0085 -> используем preferredNonOneServiceType (BROK/EDO)
+                if (preferredNonOneServiceType != 0)
+                {
+                    var rowsPd = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(r => r.Field<string>("Текст") == "registration" && r.Field<string>("document_set") == "PD0085");
+                    foreach (var r in rowsPd)
+                    {
+                        r["GUID услуги"] = preferredNonOneServiceType.ToString();
+                        r["subject_type"] = (preferredNonOneServiceType == 3) ? "EDO" : "BROK";
+                    }
+                }
+                else
+                {
+                    var rowsToDelete = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(r => r.Field<string>("Текст") == "registration" && r.Field<string>("document_set") == "PD0085").ToList();
+                    foreach (var rr in rowsToDelete) rr.Delete();
+                    dtBookOfReferenceReestrRK.AcceptChanges();
+                    logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - INFO - Удалены registration+PD0085 (service_type != 1 не найден)");
+                }
+
+                // Лог — несколько диагностических строк: покажем ключевые записи после изменений
+                var diagKeys = new[] { "uvedomlenie3", "uvedomlenie4", "ZayavleniyeKompaniya", "registration" };
+                foreach (var key in diagKeys)
+                {
+                    var list = dtBookOfReferenceReestrRK.AsEnumerable().Where(r => r.Field<string>("Текст") == key).ToList();
+                    foreach (var r in list)
+                    {
+                        logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - DIAG - Text={key}; document_set={r["document_set"]}; subject_type={r["subject_type"]}; GUID услуги={r["GUID услуги"]}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - ERR - {ex.Message}  {ex.StackTrace}");
+            }
+            finally
+            {
+                log = log + Environment.NewLine + logBuilder.ToString();
+            }
+        }
+
+
+        public static void UpdateGuidAndSubjectForPD0084(DataTable dtBookOfReferenceReestrRK, Dictionary<int, string> dictionaryGUIDservices, ref string log)
+        {
+            var logBuilder = new System.Text.StringBuilder();
+
+            try
+            {
+                // Получаем значение service_type, которое != 1, из словаря dictionaryGUIDservices
+                var serviceTypeNotEqualToOne = dictionaryGUIDservices
+                    .Where(kvp => kvp.Key != 1)
+                    .Select(kvp => kvp.Key)
+                    .FirstOrDefault(); // Берем первое значение, если их несколько
+
+                if (serviceTypeNotEqualToOne != 0) // Проверяем, что значение найдено
+                {
+                    // Ищем строки в bookReferenceTable, где "Текст" == 'uvedomlenie3' и "document_set" == 'PD0084'
+                    var rowsToUpdateuvedomlenie3 = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(row =>
+                            (row.Field<string>("Текст") == "uvedomlenie3" && row.Field<string>("document_set") == "PD0084"));
+
+                    // Устанавливаем значение service_type в поле "GUID услуги" для найденных строк, а так же subject_type
+                    foreach (var row in rowsToUpdateuvedomlenie3)
+                    {
+                        row["GUID услуги"] = serviceTypeNotEqualToOne.ToString();
+
+                        if (serviceTypeNotEqualToOne == 2)
+                        {
+                            row["subject_type"] = "BROK";
+                        }
+                        else if (serviceTypeNotEqualToOne == 3)
+                        {
+                            row["subject_type"] = "EDO";
+                        }
+                    }
+
+                    // Ищем строки в bookReferenceTable, где "Текст" == 'uvedomlenie4' и "document_set" == 'PD0084'
+                    var rowsToUpdateuvedomlenie4 = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(row =>
+                            (row.Field<string>("Текст") == "uvedomlenie4" && row.Field<string>("document_set") == "PD0084"));
+
+                    // Устанавливаем значение service_type в поле "GUID услуги" для найденных строк, а так же subject_type
+                    foreach (var row in rowsToUpdateuvedomlenie4)
+                    {
+                        row["GUID услуги"] = serviceTypeNotEqualToOne.ToString();
+
+                        if (serviceTypeNotEqualToOne == 2)
+                        {
+                            row["subject_type"] = "BROK";
+                        }
+                        else if (serviceTypeNotEqualToOne == 3)
+                        {
+                            row["subject_type"] = "EDO";
+                        }
+                    }
+
+                    // Ищем строку в bookReferenceTable, где "Текст" == 'ZayavleniyeKompaniya'
+                    var zayavleniyeRow = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .FirstOrDefault(row => row.Field<string>("Текст") == "ZayavleniyeKompaniya");
+
+                    if (zayavleniyeRow != null)
+                    {
+                        // Устанавливаем значение service_type в поле "GUID услуги"
+                        zayavleniyeRow["GUID услуги"] = serviceTypeNotEqualToOne.ToString();
+
+                        // Устанавливаем значение в поле "document_set" в зависимости от service_type
+                        if (serviceTypeNotEqualToOne == 2)
+                        {
+                            zayavleniyeRow["document_set"] = "BK1186";
+                            zayavleniyeRow["subject_type"] = "BROK";
+                        }
+                        else if (serviceTypeNotEqualToOne == 3)
+                        {
+                            zayavleniyeRow["document_set"] = "EDO0078";
+                            zayavleniyeRow["subject_type"] = "EDO";
+                        }
+                    }
+                }
+                else
+                {
+                    logBuilder.AppendLine($"Значение service_type, отличное от 1, не найдено в словаре dictionaryGUIDservices.");
+                }
+            }
+            catch (Exception ex)
+            {
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - ERR - {ex.Message}  {ex.StackTrace}  {ex.Data}  {ex.Source}");
+            }
+            finally
+            {
+                log = log + Environment.NewLine + logBuilder.ToString();
+            }
+        }
+
+
+        public static void UpdateRegistrationRows(DataTable dtBookOfReferenceReestrRK, Dictionary<int, string> dictionaryGUIDservices, ref string log)
+        {
+            var logBuilder = new System.Text.StringBuilder();
+
+            try
+            {
+                // Получаем значение service_type, которое == 1, из словаря dictionaryGUIDservices
+                var serviceTypeEqualToOne = dictionaryGUIDservices
+                    .Where(kvp => kvp.Key == 1)
+                    .Select(kvp => kvp.Key)
+                    .FirstOrDefault();
+
+                if (serviceTypeEqualToOne != 0) // Проверяем, что значение найдено
+                {
+                    // Ищем строки в bookReferenceTable, где "Текст" == 'registration' и "document_set" == 'BN_DKBO0064'
+                    var rowsToUpdate = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(row =>
+                            row.Field<string>("Текст") == "registration" && row.Field<string>("document_set") == "BN_DKBO0064")
+                        .ToList();
+
+                    // Устанавливаем значение service_type в поле "GUID услуги" для найденных строк
+                    foreach (var row in rowsToUpdate)
+                    {
+                        row["GUID услуги"] = serviceTypeEqualToOne.ToString();
+                        row["subject_type"] = "BANK";
+                    }
+                }
+                else
+                {
+                    // Удаляем строки registration + BN_DKBO0064 если service_type == 1 не найден
+                    var rowsToDelete = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(row =>
+                            row.Field<string>("Текст") == "registration" && row.Field<string>("document_set") == "BN_DKBO0064")
+                        .ToList();
+
+                    foreach (var row in rowsToDelete)
+                        row.Delete();
+
+                    dtBookOfReferenceReestrRK.AcceptChanges();
+
+                    logBuilder.AppendLine($"Значение service_type, равное 1, не найдено в словаре dictionaryGUIDservices. Строки registration + BN_DKBO0064 удалены из dtBookOfReferenceReestrRK");
+                }
+
+                // Получаем значение service_type, которое != 1, из словаря dictionaryGUIDservices
+                var serviceTypeNotEqualToOne = dictionaryGUIDservices
+                    .Where(kvp => kvp.Key != 1)
+                    .Select(kvp => kvp.Key)
+                    .FirstOrDefault(); // Берем первое значение, если их несколько
+
+                if (serviceTypeNotEqualToOne != 0) // Проверяем, что значение найдено
+                {
+                    // Ищем строки в bookReferenceTable, где "Текст" == 'registration' и "document_set" == 'PD0085'
+                    var rowsToUpdate = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(row =>
+                            row.Field<string>("Текст") == "registration" && row.Field<string>("document_set") == "PD0085")
+                        .ToList();
+
+                    // Устанавливаем значение service_type в поле "GUID услуги" для найденных строк
+                    foreach (var row in rowsToUpdate)
+                    {
+                        row["GUID услуги"] = serviceTypeNotEqualToOne.ToString();
+
+                        if (serviceTypeNotEqualToOne == 2)
+                        {
+                            row["subject_type"] = "BROK";
+                        }
+                        else if (serviceTypeNotEqualToOne == 3)
+                        {
+                            row["subject_type"] = "EDO";
+                        }
+                    }
+                }
+                else
+                {
+                    // Удаляем строки registration + PD0085 если нет service_type != 1
+                    var rowsToDelete = dtBookOfReferenceReestrRK.AsEnumerable()
+                        .Where(row =>
+                            row.Field<string>("Текст") == "registration" && row.Field<string>("document_set") == "PD0085")
+                        .ToList();
+
+                    foreach (var row in rowsToDelete)
+                        row.Delete();
+
+                    dtBookOfReferenceReestrRK.AcceptChanges();
+
+                    logBuilder.AppendLine($"Значение service_type, отличное от 1, не найдено в словаре dictionaryGUIDservices. Строки registration + PD0085 удалены из dtBookOfReferenceReestrRK");
+                }
+            }
+            catch (Exception ex)
+            {
+                logBuilder.AppendLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss} - ERR - {ex.Message}  {ex.StackTrace}  {ex.Data}  {ex.Source}");
+            }
+            finally
+            {
+                log = log + Environment.NewLine + logBuilder.ToString();
+            }
+        } 
 
         public static string GetFileNameWithoutExtension(string filePath)
         {
@@ -1552,10 +1865,8 @@ namespace _958
                     }
                     else if (documentSet?.Trim() == "PD0085" && normalizedSubjectType == "BROK")
                     {
-                        //searchText = "ZayavleniyeKompaniya";
-                        searchText = text.Equals("registration", StringComparison.OrdinalIgnoreCase)
-                            ? "registration"
-                            : "ZayavleniyeKompaniya";
+                        // для брокера PD0085 — только registration
+                        searchText = "registration";
 
                         fileIds = new List<string>();
                         foreach (DataRow r in dtReestrFilesFiltered.Rows)
@@ -1576,6 +1887,27 @@ namespace _958
                     else if (documentSet?.Trim() == "EDO0078" && normalizedSubjectType == "EDO")
                     {
                         // по кЗадаче: zayavlenie/zayvlenieakcept + ZayavleniyeKompaniya → EDO0078/EDO
+                        searchText = "ZayavleniyeKompaniya";
+
+                        fileIds = new List<string>();
+                        foreach (DataRow r in dtReestrFilesFiltered.Rows)
+                        {
+                            if (r["Номер заявки"]?.ToString() == requestNumber &&
+                                !string.IsNullOrEmpty(r["Путь к файлу"]?.ToString()) &&
+                                r["Путь к файлу"].ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                r["ID файла в СХФ"]?.ToString() != "error")
+                            {
+                                var id = r["ID файла в СХФ"]?.ToString();
+                                if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                                    fileIds.Add(id);
+                            }
+                        }
+                        if (fileIds.Count > 0)
+                            updRow["file_id"] = string.Join("|", fileIds);
+                    }
+                    else if (documentSet?.Trim() == "BK1186" && normalizedSubjectType == "BROK")
+                    {
+                        // ZayavleniyeKompaniya → BK1186/BROK
                         searchText = "ZayavleniyeKompaniya";
 
                         fileIds = new List<string>();
