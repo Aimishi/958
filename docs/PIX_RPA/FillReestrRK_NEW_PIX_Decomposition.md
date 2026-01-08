@@ -379,6 +379,7 @@ if (ReestrRKUpdate != null)
 ### Выходные переменные
 Заполненные поля в `matchingUpdateRows`, новые строки в `ReestrRKUpdate`, обновлённые `complectCache`/`importedKeys`, дополненный `logBuilder`.
 ### Код (вставляется в активность "Вызов C#")
+> Обратите внимание: строка поиска `pasport` сохранена в точной орфографии исходных файлов и кода.
 ```csharp
 // STEP09_ProcessMatchingUpdateRows
 if (shouldAbort) return;
