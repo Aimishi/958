@@ -14,31 +14,31 @@
 | --- | --- | --- | --- | --- | --- |
 | `dtReestrFilesFiltered` | DataTable | весь процесс | уже есть (вход) | Step01–09 | нет |
 | `dtBookOfReferenceReestrRK` | DataTable | весь процесс | уже есть (вход) | Step05–09 | нет |
-| `rowUniqNumber` | DataRow | per `foreach rowUniq` | из внешнего цикла | Step01 | да, на каждую заявку |
+| `rowUniqNumber` | DataRow | на каждую запись `rowUniq` | из внешнего цикла | Step01 | да, на каждую заявку |
 | `dictionaryGUIDservices` | Dictionary<int,string> | весь процесс | уже есть (вход) | Step09 | нет |
-| `text` | string | per `foreach text` | из внутреннего цикла | Step02–09 | да, на каждый `text` |
+| `text` | string | на каждый `text` | из внутреннего цикла | Step02–09 | да, на каждый `text` |
 | `ReestrRKUpdate` | DataTable | весь прогон | уже есть (вход) | Step08–09 | **нет** |
 | `log` | string | весь прогон | уже есть (вход) | Step10 | нет |
-| `requestNumber` | string | per `rowUniq` | Step01 | Step03–09 | да, на каждую заявку |
-| `guidEBA` | string | per `rowUniq` | Step01 | Step08–09 | да, на каждую заявку |
-| `regexMain` | Regex | per `text` | Step02 | Step03 | да, на каждый `text` |
-| `regexAlt` | Regex | per `text` | Step02 | Step03 | да, на каждый `text` |
-| `regexFilePath` | Regex | per `text` (опц.) | Step06 | Step06 | да, на каждый `text` |
-| `regexSearchPassport` | Regex | per `text` (опц.) | Step09 | Step09 | да, на каждый `text` |
-| `hasMatch` | bool | per `text` | Step03 | Step03 | да, на каждый `text` |
-| `shouldAbort` | bool | per `text` | Step01/03/06/07 | Step03–09 | да, на каждый `text` |
-| `isChildSlot` | bool | per `text` | Step07 | Step07–09 | да, на каждый `text` |
-| `hasParent` | bool | per `text` | Step04 | Step07–09 | да, на каждый `text` |
-| `parentSubjects` | HashSet<string> | per `text` | Step01/04 | Step04/07/09 | да, на каждый `text` |
-| `foundParentSlots` | HashSet<string> | per `text` | Step01/04 | Step04/09 | да, на каждый `text` |
-| `matchingUpdateRows` | List<DataRow> | per `text` | Step01/05 | Step05/07/09 | да, на каждый `text` |
-| `rowsWithTextInFilePaths` | List<DataRow> | per `text` | Step01/06 | Step06/07 | да, на каждый `text` |
-| `passportSets` | HashSet<string> | per `text` (допустимо общий) | Step08 (или заранее) | Step09 | да, на каждый `text` (как в исходной логике) |
-| `complectCache` | Dictionary<string, Guid> | per `text` | Step08 | Step09 | да, на каждый `text` |
-| `importedKeys` | HashSet<string> | per `text` | Step08 (строится из `ReestrRKUpdate`) | Step09 | да, на каждый `text` |
-| `logBuilder` | StringBuilder | per `text` | Step01 | Step03–10 | да, на каждый `text` |
+| `requestNumber` | string | на каждую заявку (`rowUniqNumber`) | Step01 | Step03–09 | да, на каждую заявку |
+| `guidEBA` | string | на каждую заявку (`rowUniqNumber`) | Step01 | Step08–09 | да, на каждую заявку |
+| `regexMain` | Regex | на каждый `text` | Step02 | Step03 | да, на каждый `text` |
+| `regexAlt` | Regex | на каждый `text` | Step02 | Step03 | да, на каждый `text` |
+| `regexFilePath` | Regex | на каждый `text` (опц.) | Step06 | Step06 | да, на каждый `text` |
+| `regexSearchPassport` | Regex | на каждый `text` (опц.) | Step09 | Step09 | да, на каждый `text` |
+| `hasMatch` | bool | на каждый `text` | Step03 | Step03 | да, на каждый `text` |
+| `shouldAbort` | bool | на каждый `text` | Step01/03/06/07 | Step03–09 | да, на каждый `text` |
+| `isChildSlot` | bool | на каждый `text` | Step07 | Step07–09 | да, на каждый `text` |
+| `hasParent` | bool | на каждый `text` | Step04 | Step07–09 | да, на каждый `text` |
+| `parentSubjects` | HashSet<string> | на каждый `text` | Step01/04 | Step04/07/09 | да, на каждый `text` |
+| `foundParentSlots` | HashSet<string> | на каждый `text` | Step01/04 | Step04/09 | да, на каждый `text` |
+| `matchingUpdateRows` | List<DataRow> | на каждый `text` | Step01/05 | Step05/07/09 | да, на каждый `text` |
+| `rowsWithTextInFilePaths` | List<DataRow> | на каждый `text` | Step01/06 | Step06/07 | да, на каждый `text` |
+| `passportSets` | HashSet<string> | на каждый `text` (можно держать общим) | Step08 (или заранее) | Step09 | да, на каждый `text` (как в исходной логике) |
+| `complectCache` | Dictionary<string, Guid> | на каждый `text` | Step08 | Step09 | да, на каждый `text` |
+| `importedKeys` | HashSet<string> | на каждый `text` | Step08 (строится из `ReestrRKUpdate`) | Step09 | да, на каждый `text` |
+| `logBuilder` | StringBuilder | на каждый `text` | Step01 | Step03–10 | да, на каждый `text` |
 
-**Reset правило:** почти все промежуточные переменные сбрасываются на каждую итерацию `text`. `requestNumber/guidEBA` сбрасываются на каждую заявку (`rowUniqNumber`). `ReestrRKUpdate` никогда не очищается. `importedKeys` воссоздаётся из `ReestrRKUpdate` при каждом вызове (поведение исходного кода сохраняется).
+**Правила сброса:** почти все промежуточные переменные сбрасываются на каждую итерацию `text`. `requestNumber/guidEBA` сбрасываются на каждую заявку (`rowUniqNumber`). `ReestrRKUpdate` никогда не очищается. `importedKeys` воссоздаётся из `ReestrRKUpdate` при каждом вызове (поведение исходного кода сохраняется).
 
 ### Порядок шагов и ранние выходы
 1. **Step01_InitContext** — подготовка контекста и обнуление коллекций.
@@ -198,6 +198,7 @@ else
 ### Выходные переменные
 `parentSubjects`, `foundParentSlots`, `hasParent`, `logBuilder`.
 ### Код (вставляется в активность "Вызов C#")
+> Шаблон Anchored оставлен внутри шага, чтобы Step был самодостаточным; при желании можно вынести его в отдельную переменную процесса.
 ```csharp
 // STEP04_DetectParents
 if (shouldAbort) return;
@@ -449,6 +450,7 @@ foreach (var updRow in matchingUpdateRows)
         }
         else
         {
+            // Орфография searchText соответствует исходным именам файлов.
             searchText = "pasport";
             fileIds = new List<string>();
             foreach (DataRow r in dtReestrFilesFiltered.Rows)
@@ -714,4 +716,4 @@ log = log + Environment.NewLine + logBuilder.ToString();
 - `ReestrRKUpdate` не очищается между итерациями; `importedKeys` всегда строится заново из него.
 - При необходимости инициализировать Regex/HashSet/Dictionary в PIX — используйте «Присвоить значение» перед Step.
 - Шаблон Anchored и массив `passportParentRules` оставлены прямо в шагах для самодостаточности; при необходимости их можно вынести в общие переменные процесса.
-- Regex для anketa/обычных слотов повторяется в Step02/Step06/Step09; при изменении обновляйте все три или вынесите единый helper, если это допустимо в вашем процессе PIX.
+- Regex для anketa/обычных слотов повторяется в Step02/Step06/Step09; при изменении обновляйте все три или вынесите единый helper (например, переменные процесса `regexAnketaPattern` и `regexDefaultPattern`), если это допустимо в вашем процессе PIX.
