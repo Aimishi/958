@@ -1,6 +1,6 @@
 # FillReestrRK_NEW → PIX RPA (low-code) reference split
 
-Референтное разбиение метода `FillReestrRK_NEW` (файл `Program.cs`) на шаги для PIX RPA **без DTO и без конструкторов**. Исходная логика остаётся в коде, здесь — инструкция, как перенести в цепочку активностей «Вызов C#», опираясь только на переменные процесса.
+Эталонное разбиение метода `FillReestrRK_NEW` (файл `Program.cs`) на шаги для PIX RPA **без DTO и без конструкторов**. Исходная логика остаётся в коде, здесь — инструкция, как перенести в цепочку активностей типа «Вызов C#», опираясь только на переменные процесса.
 
 > **Важно про `splitCode.cs`:** файл использует `static`-состояние и служебные «PartX» методы. Это *не* целевая форма для PIX RPA. Для low-code переноса используйте шаги и переменные из этого документа.
 
@@ -62,7 +62,7 @@
 ---
 
 ## B) Бизнес-документация (правила предметной области)
-- `text` — имя слота/документа, ищется в имени файла (`Path.GetFileNameWithoutExtension`) регулярным выражением, допускающим суффиксы `\d{1,3}` и, для `anketa*`, альтернативу `_zatavl`.
+- `text` — имя слота/документа, ищется в имени файла (`Path.GetFileNameWithoutExtension`) регулярным выражением, допускающим суффиксы `\d{1,3}` и, для `anketa*`, альтернативную форму `_zatavl`.
 - **Родительские слоты** (ищутся в файлах заявки): `AnketaBroker`→BROK, `AnketaBank`→BANK, `anketa_zatavl`→BANK, `anketa` (строго без `_something`)→BANK, `zayavlenieakcept`→EDO, `zayavlenie`→EDO, `AnketaDU`→DU. Все совпадения собираются в `parentSubjects` и `foundParentSlots`.
 - **Дочерние слоты**: `uvedomlenie1/2/3/4`, `ZayavleniyeBanka`, `ZayavleniyeKompaniya`, `registration`. При наличии родителя — фильтруются по `subject_type ∈ parentSubjects`.
 - **registration c родителем**: BANK → `BN_DKBO0064/BANK`; BROK → `PD0085/BROK`; EDO (`zayavlenie`|`zayavlenieakcept`) → `PD0085/EDO`. Другие комбинации не допускаются.
@@ -205,6 +205,7 @@ if (shouldAbort) return;
 parentSubjects.Clear();
 foundParentSlots.Clear();
 
+// Локальная Anchored оставлена в шаге, чтобы блок был самодостаточным в PIX.
 Regex Anchored(string token, bool excludeZatavl = false)
 {
     var safe = Regex.Escape(token);
@@ -380,6 +381,7 @@ if (ReestrRKUpdate != null)
 ```csharp
 // STEP09_ProcessMatchingUpdateRows
 if (shouldAbort) return;
+// Нет подходящих строк справочника — дальше делать нечего.
 if (matchingUpdateRows == null || matchingUpdateRows.Count == 0) return;
 
 foreach (var updRow in matchingUpdateRows)
@@ -424,6 +426,7 @@ foreach (var updRow in matchingUpdateRows)
 
     if (passportSets.Contains(documentSet) && hasTextFile)
     {
+        // Жёстко задано в шаге, чтобы не требовать внешней конфигурации в PIX.
         var passportParentRules = new (string ParentSlot, string DocumentSet, string SubjectType)[]
         {
             ("anketa_zatavl", "BN_DKBO0132", "BANK"),
@@ -710,3 +713,5 @@ log = log + Environment.NewLine + logBuilder.ToString();
 - Держите порядок вызовов и проверки `shouldAbort`.
 - `ReestrRKUpdate` не очищается между итерациями; `importedKeys` всегда строится заново из него.
 - При необходимости инициализировать Regex/HashSet/Dictionary в PIX — используйте «Присвоить значение» перед Step.
+- Шаблон Anchored и массив `passportParentRules` оставлены прямо в шагах для самодостаточности; при необходимости их можно вынести в общие переменные процесса.
+- Regex для anketa/обычных слотов повторяется в Step02/Step06/Step09; при изменении обновляйте все три или вынесите единый helper, если это допустимо в вашем процессе PIX.
