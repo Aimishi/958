@@ -1407,7 +1407,7 @@ namespace _958
             }
         }
 
-        // PIX RPA MIGRATION NOTES: см. docs/PIX_RPA/FillReestrRK_NEW_PIX_Decomposition.md для разбиения без DTO/конструкторов.
+        // PIX RPA MIGRATION NOTES: see docs/PIX_RPA/FillReestrRK_NEW_PIX_Decomposition.md for the step split (no DTO/constructors).
         public static void FillReestrRK_NEW(DataTable dtReestrFilesFiltered, DataTable dtBookOfReferenceReestrRK, DataRow rowUniqNumber, Dictionary<int, string> dictionaryGUIDservices, ref string log, string text, DataTable ReestrRKUpdate)
         {
             var logBuilder = new System.Text.StringBuilder();
