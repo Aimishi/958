@@ -13,8 +13,6 @@ namespace _958
     {
         public static void VerifyPixStepsEquivalence()
         {
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
             var reestrFilesTable = Program.ReadCsvToDataTable("958_test_101225_reestrFiles.csv");
             var firstRequestNumber = reestrFilesTable.AsEnumerable()
                 .Select(r => r.Field<string>("Номер заявки"))

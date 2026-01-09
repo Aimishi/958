@@ -495,11 +495,10 @@ if (!shouldAbort)
                             r["ID файла в СХФ"]?.ToString() != "error")
                         {
                             var id = r["ID файла в СХФ"]?.ToString();
-                            if (!string.IsNullOrEmpty(id) && (fileIds == null || !fileIds.Contains(id)))
-                            {
-                                fileIds ??= new List<string>();
-                                fileIds.Add(id);
-                            }
+                        if (!string.IsNullOrEmpty(id) && !fileIds.Contains(id))
+                        {
+                            fileIds.Add(id);
+                        }
                         }
                     }
                     if (fileIds != null && fileIds.Count > 0)
