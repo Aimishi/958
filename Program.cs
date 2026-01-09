@@ -71,6 +71,10 @@ namespace _958
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+#if DEBUG
+            PixRpaStepsVerifier.VerifyPixStepsEquivalence();
+#endif
+
 
             // Примеры использования метода для разных файлов CSV
             DataTable reestrFilesTable = ReadCsvToDataTable("958_test_101225_reestrFiles.csv");
